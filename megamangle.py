@@ -1,33 +1,38 @@
-from PIL import Image
 import os
+from dotenv import load_dotenv
+from PIL import Image
 from multiprocessing import Pool
+from tqdm import tqdm
+
+load_dotenv('.env.path')
 
 def resize_image(file_path):
     megapixels = 20
-    input_dir = 'path/to/input/directory'
-    output_dir = 'path/to/output/directory'
     if file_path.lower().endswith('.png'):
-        print(f"Resizing {file_path}")
         with Image.open(file_path) as im:
             megapixels_in_pixels = megapixels * 1000000
             ratio = (megapixels_in_pixels / (im.width * im.height)) ** 0.5
             width = int(im.width * ratio)
             height = int(im.height * ratio)
             resized_im = im.resize((width, height))
-            output_path = os.path.join(output_dir, os.path.relpath(file_path, input_dir))
+            output_path = os.path.join(os.environ['OUTPUT_DIR'], os.path.relpath(file_path, os.environ['INPUT_DIR']))
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             resized_im.save(output_path)
-            print(f"Saved resized image to {output_path}")
+
+def process_file(file_path):
+    resize_image(file_path)
+    return file_path
 
 if __name__ == '__main__':
-    input_dir = 'path/to/input/directory'
-    output_dir = 'path/to/output/directory'
-    pool = Pool(processes=6) # Change the number of processes to suit your system
+    input_dir = os.environ['INPUT_DIR']
+    output_dir = os.environ['OUTPUT_DIR']
+    pool = Pool(processes=6)
+    file_paths = []
     for root, dirs, files in os.walk(input_dir):
         for file in files:
             file_path = os.path.join(root, file)
-            pool.apply_async(resize_image, args=(file_path,))
-            print(f"Scheduled {file_path} for resizing")
-    pool.close()
-    pool.join()
-    print("Done") 
+            file_paths.append(file_path)
+    with tqdm(total=len(file_paths)) as pbar:
+        for i, _ in enumerate(pool.imap_unordered(process_file, file_paths)):
+            pbar.update()
+    print("Done")
